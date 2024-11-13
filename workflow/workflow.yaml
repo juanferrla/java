@@ -21,13 +21,15 @@ spec:
         command: [sh, -c]
         args: 
           - |
-            rm -rf /src/* /src/.*
+            rm -rf /app/* /app/.*
+            mkdir -p /app
             # Configurar las credenciales de Git usando las variables de entorno
             git config --global credential.helper store
             echo "https://${GIT_USERNAME}:${GIT_TOKEN}@github.com" > ~/.git-credentials
             # Clonar el repositorio
-            git clone https://github.com/juanferrla/java.git /src || exit 1
-            ls -lah /src
+            git clone https://github.com/juanferrla/java.git /app 
+            ls -lah /app
+            ls -lah /app/src
       env:
       - name: GITHUB_USERNAME
         valueFrom:
@@ -41,7 +43,7 @@ spec:
              key: token
       volumeMounts:
         - name: source-code
-          mountPath: /src
+          mountPath: /app
     # Paso para compilar el proyecto con Maven
     - name: compile-app
       container:
@@ -49,11 +51,13 @@ spec:
         command: [sh, -c]
         args:
           - |
-            cd /src
+            echo "vemos si hay firec"
+            ls -lah /app
+            cd /app
             mvn clean package -DskipTests
       volumeMounts:
         - name: source-code
-          mountPath: /src
+          mountPath: /app
 
     # Paso para construir y enviar la imagen a Harbor
     - name: build-and-push-image
@@ -62,12 +66,12 @@ spec:
         command: [sh, -c]
         args:
           - |
-            cd /src
+            cd /app
             docker build -t harbor.juanan.local/default/my-java-app:latest .
             docker push harbor.juanan.local/default/my-java-app:latest
       volumeMounts:
         - name: source-code
-          mountPath: /src
+          mountPath: /app
       env:
         - name: DOCKER_CONFIG
           value: /kaniko/.docker
@@ -76,3 +80,10 @@ spec:
     - name: source-code
       persistentVolumeClaim:
         claimName: source-code-pvc
+        persistentVolumeReclaimPolicy: Delete
+    - name: docker-sock
+      hostPath:
+        path: /var/run/docker.sock
+    - name: daemon-config
+      secret:
+        secretName: docker-config

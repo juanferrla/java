@@ -4,7 +4,7 @@ metadata:
   name: source-code-pvc
 spec:
   accessModes:
-    - ReadWriteOnce  # Permite que un solo nodo lea y escriba en el volumen
+    - ReadWriteMany  # Permite que un solo nodo lea y escriba en el volumen
   resources:
     requests:
       storage: 1Gi  # Tamaño del volumen
