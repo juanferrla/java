@@ -1,0 +1,78 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: build-and-push-java-app-
+  namespace: data-workflows
+spec:
+  entrypoint: build-and-push
+  templates:
+    - name: build-and-push
+      steps:
+        - - name: clone-repo
+            template: git-clone
+        - - name: compile-app
+            template: compile-app
+        - - name: build-and-push-image
+            template: build-and-push-image
+    # Template para clonar el repositorio Git
+    - name: git-clone
+      container:
+        image: alpine/git:latest
+        command: [sh, -c]
+        args: 
+          - |
+            rm -rf /src/* /src/.*
+            # Configurar las credenciales de Git usando las variables de entorno
+            git config --global credential.helper store
+            echo "https://${GIT_USERNAME}:${GIT_TOKEN}@github.com" > ~/.git-credentials
+            # Clonar el repositorio
+            git clone https://github.com/juanferrla/java.git /src || exit 1
+            ls -lah /src
+      env:
+      - name: GITHUB_USERNAME
+        valueFrom:
+           secretKeyRef:
+             name: github-secret
+             key: username
+      - name: GITHUB_TOKEN
+        valueFrom:
+           secretKeyRef:
+             name: github-secret
+             key: token
+      volumeMounts:
+        - name: source-code
+          mountPath: /src
+    # Paso para compilar el proyecto con Maven
+    - name: compile-app
+      container:
+        image: maven:3.8.5-openjdk-11
+        command: [sh, -c]
+        args:
+          - |
+            cd /src
+            mvn clean package -DskipTests
+      volumeMounts:
+        - name: source-code
+          mountPath: /src
+
+    # Paso para construir y enviar la imagen a Harbor
+    - name: build-and-push-image
+      container:
+        image: docker:latest
+        command: [sh, -c]
+        args:
+          - |
+            cd /src
+            docker build -t harbor.juanan.local/default/my-java-app:latest .
+            docker push harbor.juanan.local/default/my-java-app:latest
+      volumeMounts:
+        - name: source-code
+          mountPath: /src
+      env:
+        - name: DOCKER_CONFIG
+          value: /kaniko/.docker
+
+  volumes:
+    - name: source-code
+      persistentVolumeClaim:
+        claimName: source-code-pvc
